@@ -217,16 +217,7 @@ func (a *Adapter) AddPolicy(sec string, ptype string, rule []string) error {
 func (a *Adapter) RemovePolicy(sec string, ptype string, rule []string) error {
 	return a.WithTx(func(tx *ent.Tx) error {
 		instance := a.toInstance(ptype, rule)
-		_, err := tx.CasbinRule.Delete().Where(
-			casbinrule.PtypeEQ(instance.Ptype),
-			casbinrule.V0EQ(instance.V0),
-			casbinrule.V1EQ(instance.V1),
-			casbinrule.V2EQ(instance.V2),
-			casbinrule.V3EQ(instance.V3),
-			casbinrule.V4EQ(instance.V4),
-			casbinrule.V5EQ(instance.V5),
-		).Exec(a.ctx)
-		return err
+		return a.deleteRule(tx, instance)
 	})
 }
 
@@ -275,15 +266,7 @@ func (a *Adapter) RemovePolicies(sec string, ptype string, rules [][]string) err
 	return a.WithTx(func(tx *ent.Tx) error {
 		for _, rule := range rules {
 			instance := a.toInstance(ptype, rule)
-			if _, err := tx.CasbinRule.Delete().Where(
-				casbinrule.PtypeEQ(instance.Ptype),
-				casbinrule.V0EQ(instance.V0),
-				casbinrule.V1EQ(instance.V1),
-				casbinrule.V2EQ(instance.V2),
-				casbinrule.V3EQ(instance.V3),
-				casbinrule.V4EQ(instance.V4),
-				casbinrule.V5EQ(instance.V5),
-			).Exec(a.ctx); err != nil {
+			if err := a.deleteRule(tx, instance); err != nil {
 				return err
 			}
 		}
@@ -419,15 +402,7 @@ func (a *Adapter) UpdatePolicies(sec string, ptype string, oldRules, newRules []
 	return a.WithTx(func(tx *ent.Tx) error {
 		for _, policy := range oldRules {
 			rule := a.toInstance(ptype, policy)
-			if _, err := tx.CasbinRule.Delete().Where(
-				casbinrule.PtypeEQ(rule.Ptype),
-				casbinrule.V0EQ(rule.V0),
-				casbinrule.V1EQ(rule.V1),
-				casbinrule.V2EQ(rule.V2),
-				casbinrule.V3EQ(rule.V3),
-				casbinrule.V4EQ(rule.V4),
-				casbinrule.V5EQ(rule.V5),
-			).Exec(a.ctx); err != nil {
+			if err := a.deleteRule(tx, rule); err != nil {
 				return err
 			}
 		}
@@ -470,15 +445,16 @@ func (a *Adapter) UpdateFilteredPolicies(sec string, ptype string, newPolicies [
 			return err
 		}
 		for _, rule := range rules {
-			if _, err := tx.CasbinRule.Delete().Where(
-				casbinrule.IDEQ(rule.ID),
-			).Exec(a.ctx); err != nil {
+			if err := a.deleteRule(tx, rule); err != nil {
 				return err
 			}
 		}
-		a.createPolicies(tx, ptype, newPolicies)
+		err = a.createPolicies(tx, ptype, newPolicies)
+		if err != nil {
+			return err
+		}
 		for _, rule := range rules {
-			oldPolicies = append(oldPolicies, CasbinRuleToStringArray(rule))
+			oldPolicies = append(oldPolicies, ruleToPolicy(rule))
 		}
 		return nil
 	})
@@ -499,7 +475,10 @@ func (a *Adapter) createPolicies(tx *ent.Tx, ptype string, policies [][]string) 
 	return nil
 }
 
-func CasbinRuleToStringArray(rule *ent.CasbinRule) []string {
+//ruleToPolicy convert an *ent.CasbinRule instance to casbin []string policy
+//use `rule` to denote *ent.CasbinRule
+//use `policy` to denote casbin []string policy
+func ruleToPolicy(rule *ent.CasbinRule) []string {
 	arr := make([]string, 0)
 	if rule.V0 != "" {
 		arr = append(arr, rule.V0)
@@ -520,4 +499,17 @@ func CasbinRuleToStringArray(rule *ent.CasbinRule) []string {
 		arr = append(arr, rule.V5)
 	}
 	return arr
+}
+
+func (a *Adapter) deleteRule(tx *ent.Tx, instance *ent.CasbinRule) error {
+	_, err := tx.CasbinRule.Delete().Where(
+		casbinrule.PtypeEQ(instance.Ptype),
+		casbinrule.V0EQ(instance.V0),
+		casbinrule.V1EQ(instance.V1),
+		casbinrule.V2EQ(instance.V2),
+		casbinrule.V3EQ(instance.V3),
+		casbinrule.V4EQ(instance.V4),
+		casbinrule.V5EQ(instance.V5),
+	).Exec(a.ctx)
+	return err
 }
